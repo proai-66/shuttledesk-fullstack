@@ -14,6 +14,7 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 // Every /api/* route needs a logged-in Supabase session (Authorization: Bearer <access_token>).
 app.use("/api", requireAuth);
 app.use("/api/branches", require("./routes/branches"));
+app.use("/api/categories", require("./routes/categories"));
 app.use("/api/profiles", require("./routes/profiles"));
 app.use("/api/students", require("./routes/students"));
 app.use("/api/tickets", require("./routes/tickets"));

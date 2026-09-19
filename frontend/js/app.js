@@ -37,6 +37,7 @@ function render() {
     (state.modalOpen ? QuickCreateView() : "") +
     (state.adminUserPanel ? AdminUserPanel() : "") +
     (state.branchPanel ? AdminBranchPanel() : "") +
+    (state.categoryPanel ? AdminCategoryPanel() : "") +
     (state.importPanel ? AdminImportPanel() : "") +
     (state.studentPanel ? AdminStudentPanel() : "") +
     (state.ticketDetail ? TicketDetailModal() : "") +

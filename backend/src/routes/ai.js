@@ -57,7 +57,6 @@ ${branchList}
 Given the coach's text, output ONLY a JSON object (no markdown fences, no explanation) with this exact shape:
 {
   "category": one of ["Equipment","Schedule","ChangeClass","Finance","SpecialCare"], or null if unclear,
-  "studentName": string or null,
   "branchId": one of the known branch ids above, or null if not mentioned/unclear,
   "fields": { ...only the fields relevant to the chosen category, using the exact keys shown above, omit anything not mentioned in the text }
 }

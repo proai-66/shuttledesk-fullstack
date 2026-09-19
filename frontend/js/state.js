@@ -27,6 +27,7 @@ const state = {
   financeSel: null,     // (kept for future use)
   adminUserPanel: false,// create-account modal (admin)
   branchPanel: false,   // manage-branches modal (admin)
+  categoryPanel: false, // manage-categories modal (admin)
   importPanel: false,   // import-students modal (admin)
   studentPanel: false,  // manage-students panel (admin)
   ticketDetail: null,    // id of the ticket shown in the read-only detail modal, or null
@@ -51,6 +52,9 @@ const state = {
   // working state for adding a branch
   newBranch: { id: "", name: "", msg: "" },
 
+  // working state for adding a custom ticket category
+  newCategory: { key: "", label: "", desc: "", dept: "", role: "", color: "amber", icon: "package", msg: "" },
+
   // working state for CSV import
   imp: { branch: "", rows: [], fileName: "", msg: "", importing: false },
 
@@ -58,7 +62,7 @@ const state = {
   // editingId: null = creating a new ticket; otherwise the id of the ticket being edited
   // eqDraft: the equipment item(s) currently checked + shared type/size/quantity,
   // before "Add" pushes one entry per checked item into fields.items
-  qc: { studentName: "", branch: "", cat: null, fields: {}, editingId: null, aiText: "", aiParsing: false, aiError: "",
+  qc: { branch: "", cat: null, fields: {}, editingId: null, aiText: "", aiParsing: false, aiError: "",
         eqDraft: { items: [], type: "", size: "", quantity: 1 } },
 
   // working state for the login form

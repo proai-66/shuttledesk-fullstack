@@ -40,7 +40,7 @@ document.addEventListener("click", async (e) => {
     case "toggle-lang": setLang(LANG === "en" ? "zh" : "en"); render(); break;
 
     /* coach: quick-create modal open/close */
-    case "open-modal":  state.modalOpen = true; state.qc = { studentName:"", branch:"", cat:null, fields:{}, editingId:null, aiText:"", aiParsing:false, aiError:"", eqDraft:{items:[],type:"",size:"",quantity:1} }; render(); break;
+    case "open-modal":  state.modalOpen = true; state.qc = { branch:"", cat:null, fields:{}, editingId:null, aiText:"", aiParsing:false, aiError:"", eqDraft:{items:[],type:"",size:"",quantity:1} }; render(); break;
     case "close-modal": state.modalOpen = false; render(); break;
 
     /* edit a ticket (opens the same modal, pre-filled). Coach: only their own,
@@ -52,7 +52,7 @@ document.addEventListener("click", async (e) => {
       const allowed = isAdmin ? (t.status !== "Completed" && t.status !== "Rejected") : t.status === "New";
       if (!allowed) break;
       state.modalOpen = true;
-      state.qc = { studentName:t.student_name||"", branch:t.target_branch_id||"", cat:t.category, fields:normalizeFieldsForEdit(t.category, t.details), editingId:t.id, aiText:"", aiParsing:false, aiError:"", eqDraft:{items:[],type:"",size:"",quantity:1} };
+      state.qc = { branch:t.target_branch_id||"", cat:t.category, fields:normalizeFieldsForEdit(t.category, t.details), editingId:t.id, aiText:"", aiParsing:false, aiError:"", eqDraft:{items:[],type:"",size:"",quantity:1} };
       render();
       break;
     }
@@ -67,7 +67,7 @@ document.addEventListener("click", async (e) => {
       const { reject_reason, ...restDetails } = t.details || {};
       state.ticketDetail = null;   // in case this was triggered from the detail popup
       state.modalOpen = true;
-      state.qc = { studentName:t.student_name||"", branch:t.target_branch_id||"", cat:t.category, fields:normalizeFieldsForEdit(t.category, restDetails), editingId:null, aiText:"", aiParsing:false, aiError:"", eqDraft:{items:[],type:"",size:"",quantity:1} };
+      state.qc = { branch:t.target_branch_id||"", cat:t.category, fields:normalizeFieldsForEdit(t.category, restDetails), editingId:null, aiText:"", aiParsing:false, aiError:"", eqDraft:{items:[],type:"",size:"",quantity:1} };
       render();
       break;
     }
@@ -113,6 +113,23 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "delete-branch": await deleteBranch(el.dataset.id); break;
+
+    /* admin: manage-categories panel */
+    case "open-categories":  state.categoryPanel = true; state.newCategory = { key:"", label:"", desc:"", dept:"", role:"", color:"amber", icon:"package", msg:"" }; render(); break;
+    case "close-categories": state.categoryPanel = false; render(); break;
+    case "add-category": {
+      const nc = state.newCategory;
+      const key = (nc.key || "").trim();
+      const label = (nc.label || "").trim();
+      const dept = (nc.dept || "").trim();
+      const role = (nc.role || "").trim();
+      if (!key || !label || !dept || !role) { nc.msg = "Key, label, department and role are required"; render(); break; }
+      if (CATEGORIES[key]) { nc.msg = `Code "${key}" is already used`; render(); break; }
+      const ok = await createCategory(key, { label, desc: (nc.desc||"").trim(), dept, role, color: nc.color, icon: nc.icon });
+      if (ok) { state.newCategory = { key:"", label:"", desc:"", dept:"", role:"", color:"amber", icon:"package", msg:`✓ Added ${label}` }; await refreshData(); showToast(`Category added — ${label}`, "success"); }
+      break;
+    }
+    case "delete-category": await deleteCategory(el.dataset.key); break;
 
     /* admin: manage students */
     case "open-students":  state.studentPanel = true; state.stu = { q:"", branchFilter:"", editing:null, form:{name:"",time_1:"",time_2:"",parent_whatsapp:"",branch_id:""}, msg:"" }; render(); break;
@@ -253,14 +270,13 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "qc-submit": {
-      const { studentName, branch, cat, fields, editingId } = state.qc;
+      const { branch, cat, fields, editingId } = state.qc;
       const equipmentNeedsItems = cat === "Equipment" && !(fields.items || []).length;
       if (cat && !equipmentNeedsItems) {
         state.modalOpen = false; render();
-        const name = studentName.trim() || null;
         const br = branch || null;
-        if (editingId) await updateTicketFull(editingId, cat, name, br, fields, { requireNew: state.profile.role !== "admin" });
-        else await createTicket(cat, name, br, fields);
+        if (editingId) await updateTicketFull(editingId, cat, br, fields, { requireNew: state.profile.role !== "admin" });
+        else await createTicket(cat, br, fields);
       }
       break;
     }
@@ -277,12 +293,16 @@ document.addEventListener("input", (e) => {
   else if (id === "nu-password")    state.newUser.password = e.target.value;
   else if (id === "nb-id")          state.newBranch.id = e.target.value;
   else if (id === "nb-name")        state.newBranch.name = e.target.value;
+  else if (id === "nc-key")         state.newCategory.key = e.target.value;
+  else if (id === "nc-label")       state.newCategory.label = e.target.value;
+  else if (id === "nc-desc")        state.newCategory.desc = e.target.value;
+  else if (id === "nc-dept")        state.newCategory.dept = e.target.value;
+  else if (id === "nc-role")        state.newCategory.role = e.target.value;
   else if (id === "stu-search")     { state.stu.q = e.target.value; renderStudentList(); }
   else if (id === "stu-name")       state.stu.form.name = e.target.value;
   else if (id === "stu-time1")      state.stu.form.time_1 = e.target.value;
   else if (id === "stu-time2")      state.stu.form.time_2 = e.target.value;
   else if (id === "stu-phone")      state.stu.form.parent_whatsapp = e.target.value;
-  else if (id === "qc-student-name") state.qc.studentName = e.target.value;   // optional remark — doesn't gate submit
   else if (id === "qc-ai-text")      state.qc.aiText = e.target.value;
   else if (id === "eq-draft-quantity") state.qc.eqDraft.quantity = Number(e.target.value) || 1;   // no re-render — nothing else depends on it
   else if (id === "reject-reason") {
@@ -302,6 +322,8 @@ document.addEventListener("input", (e) => {
 /* ---- DROPDOWN CHANGES ---- */
 document.addEventListener("change", (e) => {
   if (e.target.id === "nu-role") state.newUser.role = e.target.value;
+  else if (e.target.id === "nc-color") state.newCategory.color = e.target.value;
+  else if (e.target.id === "nc-icon")  state.newCategory.icon = e.target.value;
   else if (e.target.id === "qc-branch") { state.qc.branch = e.target.value; renderQuickCreate(); }
   else if (e.target.id === "imp-branch") { state.imp.branch = e.target.value; render(); }
   else if (e.target.id === "stu-branch-filter") { state.stu.branchFilter = e.target.value; renderStudentList(); }

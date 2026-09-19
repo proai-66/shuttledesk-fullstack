@@ -106,6 +106,8 @@ function HeaderView() {
   const right = isAdmin ? `
     <button data-action="open-students" class="text-sm text-slate-600 hover:text-slate-900 p-2 sm:px-3 sm:py-2 rounded-lg border border-slate-200 flex items-center gap-1.5" title="${tr("nav_students")}">
       ${icon("cap")}<span class="hidden sm:inline">${tr("nav_students")}</span></button>
+    <button data-action="open-categories" class="text-sm text-slate-600 hover:text-slate-900 p-2 sm:px-3 sm:py-2 rounded-lg border border-slate-200 flex items-center gap-1.5" title="${tr("nav_categories")}">
+      ${icon("grid")}<span class="hidden sm:inline">${tr("nav_categories")}</span></button>
     <button data-action="open-import" class="text-sm text-slate-600 hover:text-slate-900 p-2 sm:px-3 sm:py-2 rounded-lg border border-slate-200 flex items-center gap-1.5" title="${tr("nav_import")}">
       ${icon("upload")}<span class="hidden sm:inline">${tr("nav_import")}</span></button>
     <button data-action="open-branches" class="text-sm text-slate-600 hover:text-slate-900 p-2 sm:px-3 sm:py-2 rounded-lg border border-slate-200 flex items-center gap-1.5" title="${tr("nav_branches")}">
@@ -135,7 +137,12 @@ function HeaderView() {
 }
 
 /* ===== 3. SHARED CARD BITS ===== */
-function catBadge(cat){ const c=CATEGORIES[cat]; return `<span class="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${CAT_STYLE[c.color]}">${icon(c.icon,"w-3.5 h-3.5")}${tr("cat_"+cat+"_label")}</span>`; }
+// the 5 built-in categories have i18n entries (cat_X_label/desc); an
+// admin-added custom category won't, so fall back to what's stored on the
+// category itself instead of showing a raw "cat_X_label" key.
+function catLabel(key){ const k="cat_"+key+"_label"; return STRINGS.en[k]!==undefined ? tr(k) : (CATEGORIES[key]?.label || key); }
+function catDesc(key){ const k="cat_"+key+"_desc"; return STRINGS.en[k]!==undefined ? tr(k) : (CATEGORIES[key]?.desc || ""); }
+function catBadge(cat){ const c=CATEGORIES[cat]; return `<span class="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${CAT_STYLE[c.color]}">${icon(c.icon,"w-3.5 h-3.5")}${catLabel(cat)}</span>`; }
 function statusBadge(s){ return `<span class="text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[s]}">${tr("status_"+s)}</span>`; }
 // field key -> translated label, for the free-form {key: value} details object (values themselves stay as stored, only the key label is translated)
 function detailRows(d){
@@ -193,19 +200,10 @@ function agingBadge(t){
   return `<span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${stale?"bg-red-100 text-red-700":"bg-slate-100 text-slate-500"}">${tr("aging_prefix")} ${agingDuration(t.created_at)}</span>`;
 }
 
-// student/customer name is optional now — a plain "(no name)" reads as broken
-// data, so the missing case is styled as an intentional, de-emphasized placeholder
-function studentNameHtml(t, cls){
-  return t.student_name
-    ? `<span class="${cls}">${t.student_name}</span>`
-    : `<span class="text-sm italic text-slate-400">${tr("no_name_given")}</span>`;
-}
-
 function ticketCard(t, actionHtml=""){
   return `<div data-action="view-ticket" data-id="${t.id}" class="bg-white border border-slate-200 rounded-xl p-4 hover:border-slate-300 transition cursor-pointer">
     <div class="flex items-start justify-between gap-2 mb-2">
       <div><div class="flex items-center gap-2">
-        ${studentNameHtml(t, "font-semibold text-slate-900 text-sm")}
         ${t.priority==="High"?`<span class="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-medium">${tr("badge_high")}</span>`:""}
         ${t.assigned_role==="SeniorAdmin"?`<span class="text-[10px] bg-purple-600 text-white px-1.5 py-0.5 rounded font-medium">${tr("badge_foc_senior")}</span>`:""}
         ${t.admin_note?`<span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1">${icon("note","w-2.5 h-2.5")}${tr("badge_note")}</span>`:""}
@@ -281,7 +279,6 @@ function completedRow(t){
   return `<div data-action="view-ticket" data-id="${t.id}" class="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer">
     <div class="flex items-center gap-2 min-w-0">
       ${icon(c.icon,"w-4 h-4 text-slate-300 shrink-0")}
-      ${studentNameHtml(t, "text-sm font-medium text-slate-700 truncate")}
       ${statusBadge(t.status)}
       <span class="text-xs text-slate-400 truncate hidden sm:inline">${c.label} · ${branchName(t.student.branch_id)}</span>
     </div>
@@ -306,7 +303,7 @@ function closedFilterBar(){
       <option value="">All categories</option>
       ${Object.entries(CATEGORIES).map(([key,c])=>`<option value="${key}" ${cf.category===key?"selected":""}>${c.label}</option>`).join("")}
     </select>
-    <input id="closed-search" value="${cf.q}" placeholder="Search name or ticket code…" class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs flex-1 min-w-[160px]" />
+    <input id="closed-search" value="${cf.q}" placeholder="Search ticket code…" class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs flex-1 min-w-[160px]" />
   </div>`;
 }
 
@@ -318,7 +315,7 @@ function closedListHtml(done){
   if (cf.category) list = list.filter(t => t.category === cf.category);
   if (cf.q) {
     const q = cf.q.toLowerCase();
-    list = list.filter(t => t.student.name.toLowerCase().includes(q) || t.ticket_code.toLowerCase().includes(q));
+    list = list.filter(t => t.ticket_code.toLowerCase().includes(q));
   }
   if (!list.length) return `<div class="text-center text-slate-400 text-xs py-8 border border-dashed border-slate-200 rounded-xl">No closed tickets match this filter</div>`;
   return `<div class="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">${list.map(t=>completedRow(t)).join("")}</div>`;
@@ -337,10 +334,7 @@ function TicketDetailModal(){
         <button data-action="close-ticket-detail" class="text-slate-400 hover:text-slate-700">${icon("x","w-5 h-5")}</button>
       </div>
       <div class="p-5 space-y-3">
-        <div class="flex items-center justify-between gap-2">
-          ${studentNameHtml(t, "font-semibold text-slate-900")}
-          <div class="flex items-center gap-1.5 shrink-0">${statusBadge(t.status)}${t.priority==="High"?`<span class="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-medium">${tr("badge_high")}</span>`:""}</div>
-        </div>
+        <div class="flex items-center gap-1.5">${statusBadge(t.status)}${t.priority==="High"?`<span class="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-medium">${tr("badge_high")}</span>`:""}</div>
         <div class="flex items-center gap-2 flex-wrap">${catBadge(t.category)}${t.assigned_role==="SeniorAdmin"?`<span class="text-[10px] bg-purple-600 text-white px-1.5 py-0.5 rounded font-medium">${tr("badge_foc_senior")}</span>`:""}</div>
         <div class="text-xs text-slate-500 space-y-1.5 bg-slate-50 rounded-lg p-3">
           <div class="flex justify-between gap-3"><span>${tr("detail_ticket_code")}</span><span class="text-slate-800 font-medium text-right">${t.ticket_code}</span></div>
@@ -373,7 +367,7 @@ function RejectModal(){
         <button data-action="close-reject" class="text-slate-400 hover:text-slate-700">${icon("x","w-5 h-5")}</button>
       </div>
       <div class="p-5 space-y-3">
-        <p class="text-sm text-slate-600">Rejecting ${t.student_name ? `<span class="font-medium text-slate-900">${t.student_name}</span>'s` : "this"} ${CATEGORIES[t.category].label} request. The coach will be notified with your reason and will need to raise a new ticket if it's still needed.</p>
+        <p class="text-sm text-slate-600">Rejecting this ${CATEGORIES[t.category].label} request. The coach will be notified with your reason and will need to raise a new ticket if it's still needed.</p>
         <div>
           <label class="text-xs font-medium text-slate-500 mb-1 block">Reason</label>
           <textarea id="reject-reason" rows="3" placeholder="Why is this being rejected?" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">${reason}</textarea>
@@ -399,7 +393,7 @@ function NoteModal(){
         <button data-action="close-note" class="text-slate-400 hover:text-slate-700">${icon("x","w-5 h-5")}</button>
       </div>
       <div class="p-5 space-y-3">
-        <p class="text-sm text-slate-600">Visible to ${t.student_name ? `<span class="font-medium text-slate-900">${t.student_name}</span>'s` : "the"} coach on this ticket's detail view. One-way — they can't reply here.</p>
+        <p class="text-sm text-slate-600">Visible to the coach on this ticket's detail view. One-way — they can't reply here.</p>
         <textarea id="note-draft" rows="4" placeholder="e.g. Called the parent, waiting on confirmation…" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">${note}</textarea>
       </div>
       <div class="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
@@ -416,7 +410,6 @@ function applyCoachSearch(list){
   const q = (state.coachSearch||"").trim().toLowerCase();
   if (!q) return list;
   return list.filter(t =>
-    (t.student_name||"").toLowerCase().includes(q) ||
     t.ticket_code.toLowerCase().includes(q) ||
     CATEGORIES[t.category].label.toLowerCase().includes(q) ||
     tr("cat_"+t.category+"_label").toLowerCase().includes(q)
@@ -520,7 +513,7 @@ function openFilterBar(){
       <option value="">All branches</option>
       ${BRANCHES.map(b=>`<option value="${b.id}" ${of.branch===b.id?"selected":""}>${b.name}</option>`).join("")}
     </select>
-    <input id="open-search" value="${of.q}" placeholder="Search name or ticket code…" class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs flex-1 min-w-[160px]" />
+    <input id="open-search" value="${of.q}" placeholder="Search ticket code…" class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs flex-1 min-w-[160px]" />
   </div>`;
 }
 
@@ -532,7 +525,7 @@ function applyOpenFilter(open){
   if (of.branch) list = list.filter(t => t.student.branch_id === of.branch);
   if (of.q) {
     const q = of.q.toLowerCase();
-    list = list.filter(t => t.student.name.toLowerCase().includes(q) || t.ticket_code.toLowerCase().includes(q));
+    list = list.filter(t => t.ticket_code.toLowerCase().includes(q));
   }
   return list;
 }
@@ -736,6 +729,70 @@ function AdminBranchPanel() {
   </div>`;
 }
 
+/* ===== 6b2. ADMIN MANAGE-CATEGORIES PANEL =====
+   Schedule/ChangeClass/Finance/SpecialCare are still fully working under the
+   hood (old tickets, routing.js special-case logic) — they're just not
+   offered anywhere in the UI anymore (Quick ticket picker or here), so this
+   list only ever shows Equipment (the one built-in still in active use) plus
+   whatever admin-added categories exist. Nothing here can delete Equipment —
+   routing.js has special-case logic tied to it (FOC sign-off, etc.). ===== */
+function AdminCategoryPanel() {
+  const nc = state.newCategory;
+  const rows = Object.entries(CATEGORIES).filter(([key]) => !HIDDEN_BUILTIN_CATEGORIES.includes(key)).map(([key, c]) => {
+    const builtin = !!BUILTIN_CATEGORIES[key];
+    return `
+      <div class="flex items-center justify-between px-3 py-2 border border-slate-200 rounded-lg gap-2">
+        <div class="min-w-0 flex items-center gap-2">
+          <span class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${CAT_STYLE[c.color]}">${icon(c.icon,"w-3.5 h-3.5")}</span>
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-slate-900 truncate">${catLabel(key)}${builtin?` <span class="text-slate-400 font-normal">(built-in)</span>`:""}</div>
+            <div class="text-xs text-slate-400 truncate">${c.dept} · ${c.role}</div>
+          </div>
+        </div>
+        ${builtin ? "" : `<button data-action="delete-category" data-key="${key}" class="text-slate-300 hover:text-red-600 shrink-0" title="Delete">${icon("x","w-4 h-4")}</button>`}
+      </div>`;
+  }).join("");
+
+  const colorOptions = CATEGORY_COLORS.map(c => `<option value="${c}" ${nc.color===c?"selected":""}>${c}</option>`).join("");
+  const iconOptions = CATEGORY_ICONS.map(i => `<option value="${i}" ${nc.icon===i?"selected":""}>${i}</option>`).join("");
+
+  return `
+  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-categories">
+    <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md mt-0 sm:mt-16 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+        <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon("grid","w-5 h-5")}Manage categories</h2>
+        <button data-action="close-categories" class="text-slate-400 hover:text-slate-700">${icon("x","w-5 h-5")}</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="space-y-2">${rows}</div>
+
+        <div class="pt-3 border-t border-slate-100 space-y-2">
+          <p class="text-xs font-medium text-slate-500">Add a category</p>
+          <div class="flex gap-2">
+            <input id="nc-key" value="${nc.key}" maxlength="24" placeholder="Code (e.g. Merchandise)" class="w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <input id="nc-label" value="${nc.label}" placeholder="Display label" class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <input id="nc-desc" value="${nc.desc}" placeholder="Short description (optional)" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          <div class="grid grid-cols-2 gap-2">
+            <input id="nc-dept" value="${nc.dept}" placeholder="Department (e.g. Central)" class="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            <input id="nc-role" value="${nc.role}" placeholder="Assigned role (e.g. Admin)" class="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <select id="nc-color" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">${colorOptions}</select>
+            <select id="nc-icon" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">${iconOptions}</select>
+          </div>
+          <p class="text-[11px] text-slate-400">Code is permanent once used — keep it short and unique. Department/role decide who this ticket gets routed to.</p>
+          ${nc.msg?`<div class="text-xs ${nc.msg.startsWith("✓")?"text-emerald-600 bg-emerald-50":"text-red-600 bg-red-50"} rounded-lg px-3 py-2">${nc.msg}</div>`:""}
+        </div>
+      </div>
+      <div class="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+        <button data-action="close-categories" class="text-sm text-slate-500 px-4 py-2">Close</button>
+        <button data-action="add-category" class="bg-slate-900 text-white rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-1.5">${icon("plus")} Add category</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 /* ===== 6c. ADMIN IMPORT-STUDENTS PANEL ===== */
 function AdminImportPanel() {
   const im = state.imp;
@@ -891,15 +948,17 @@ function QuickCreateView() {
   </div>`;
 }
 
-// Category is the main thing being picked here — student name & branch are
-// just optional remarks, so they neither gate nor are gated by anything else.
+// Category is the main thing being picked here — branch is just an optional
+// remark, so it neither gates nor is gated by anything else.
 function quickCreateBody() {
-  const { studentName, branch, cat, fields, editingId, aiText, aiParsing, aiError } = state.qc;
+  const { branch, cat, fields, editingId, aiText, aiParsing, aiError } = state.qc;
 
   // AI-assisted fill: only offered while composing a fresh ticket (not while
   // editing an existing one) — it only ever pre-fills the fields below, the
   // coach still reviews and hits Create & route themselves.
-  const aiBlock = editingId ? "" : `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+  // Temporarily switched off via AI_FILL_ENABLED (config.js) — flip that
+  // back to true to bring this block back, nothing else needs to change.
+  const aiBlock = (editingId || !AI_FILL_ENABLED) ? "" : `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
     <label class="text-xs font-medium text-slate-500 flex items-center gap-1.5">${icon("sparkle","w-3.5 h-3.5")}${tr("qc_ai_label")}</label>
     <div class="flex gap-2">
       <input id="qc-ai-text" autocomplete="off" ${aiParsing?"disabled":""} value="${aiText}" placeholder="${tr("qc_ai_placeholder")}" class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm disabled:opacity-60" />
@@ -909,14 +968,18 @@ function quickCreateBody() {
     ${aiError?`<div class="text-xs text-red-600">${aiError}</div>`:""}
   </div>`;
 
-  // only admins can pick a category other than Equipment — coaches only
-  // ever raise Equipment tickets, so their picker is narrowed to just that
-  // (an OLD non-Equipment ticket being edited still shows its own category
-  // too, so the picker doesn't just look broken for it).
+  // coaches only ever raise Equipment tickets. Admins can also pick any
+  // custom category they've added — but not the 4 retired built-ins
+  // (HIDDEN_BUILTIN_CATEGORIES in config.js), same as everywhere else in the
+  // UI. Either way, an OLD ticket already in one of those hidden categories
+  // still shows its own category here too when being edited, so the picker
+  // doesn't just look broken for it.
   const isAdmin = state.profile.role === "admin";
-  const catOptions = isAdmin ? Object.entries(CATEGORIES) : Object.entries(CATEGORIES).filter(([key])=>key==="Equipment"||key===cat);
+  const catOptions = Object.entries(CATEGORIES).filter(([key]) =>
+    key === cat || !HIDDEN_BUILTIN_CATEGORIES.includes(key) && (isAdmin || key === "Equipment")
+  );
   const catBlock = `<div><label class="text-xs font-medium text-slate-500 mb-1 block">${tr("qc_category")}</label>
-    <div class="grid grid-cols-2 gap-2">${catOptions.map(([key,c])=>`<button data-action="qc-pick-cat" data-cat="${key}" class="flex items-start gap-2 px-3 py-2 rounded-lg border text-left transition ${cat===key?"border-slate-900 bg-slate-900 text-white":"border-slate-200 hover:border-slate-400"}">${icon(c.icon,"w-4 h-4 mt-0.5 shrink-0")}<span><span class="text-sm font-medium block">${tr("cat_"+key+"_label")}</span><span class="text-xs ${cat===key?"text-slate-300":"text-slate-400"}">${tr("cat_"+key+"_desc")}</span></span></button>`).join("")}</div></div>`;
+    <div class="grid grid-cols-2 gap-2">${catOptions.map(([key,c])=>`<button data-action="qc-pick-cat" data-cat="${key}" class="flex items-start gap-2 px-3 py-2 rounded-lg border text-left transition ${cat===key?"border-slate-900 bg-slate-900 text-white":"border-slate-200 hover:border-slate-400"}">${icon(c.icon,"w-4 h-4 mt-0.5 shrink-0")}<span><span class="text-sm font-medium block">${catLabel(key)}</span><span class="text-xs ${cat===key?"text-slate-300":"text-slate-400"}">${catDesc(key)}</span></span></button>`).join("")}</div></div>`;
 
   const fieldsBlock = cat ? dynamicFields(cat, fields) : "";
 
@@ -925,10 +988,7 @@ function quickCreateBody() {
   const remarkBlock = `
     <div class="pt-3 border-t border-slate-100">
       <p class="text-xs font-medium text-slate-500 mb-2">${tr("qc_remark_label")}</p>
-      <div class="grid grid-cols-2 gap-3">
-        <input id="qc-student-name" autocomplete="off" value="${studentName}" placeholder="${tr("qc_name_placeholder")}" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-        <select id="qc-branch" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">${branchOptions}</select>
-      </div>
+      <select id="qc-branch" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white">${branchOptions}</select>
     </div>`;
 
   const routePreview = cat ? `<div class="bg-slate-50 rounded-lg px-3 py-2 text-xs text-slate-500 flex items-center gap-1">${icon("chevron","w-3.5 h-3.5")} ${tr("qc_route_preview")} <span class="text-slate-800 font-medium">${routeTicket(cat, branch, fields).routed_to}</span></div>` : "";
@@ -1041,5 +1101,9 @@ function dynamicFields(cat, f) {
     <div><label class="${lbl}">${tr("fld_type")}</label><select class="${input}" data-field="type"><option value="">${tr("fld_select")}</option>${["Late pickup","Injury observation"].map(v=>opt(v,f.type)).join("")}</select></div>
     <div><label class="${lbl}">${tr("fld_note")}</label><input class="${input}" data-field="note" placeholder="${tr("specialcare_note_placeholder")}" value="${f.note||""}" /></div>
   </div>`;
+  // any admin-added custom category (not one of the 5 built-ins above) gets
+  // one generic free-text field — no per-category logic to hand-write for it
+  if (CATEGORIES[cat]) return `<div><label class="${lbl}">Details</label>
+    <textarea class="${input}" rows="3" data-field="note" placeholder="Describe the request">${f.note||""}</textarea></div>`;
   return "";
 }

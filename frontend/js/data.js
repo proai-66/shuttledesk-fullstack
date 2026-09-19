@@ -38,15 +38,19 @@ async function loadTickets() {
   try { return await apiGet("/tickets"); }
   catch (e) { console.error("tickets load", e); return []; }
 }
+// admin-added ticket categories on top of the 5 built-in ones (see config.js)
+async function loadCategories() {
+  try { return await apiGet("/categories"); }
+  catch (e) { console.error("categories load", e); return []; }
+}
 
-// tickets aren't linked to a real student record anymore (coach just types a
-// name) — this rebuilds a "student"-shaped object from the free-text name +
-// branch actually stored on the ticket, so the rest of the views (which all
-// read t.student.name / t.student.branch_id) don't need to change.
+// tickets aren't linked to a real student record — this rebuilds a
+// "student"-shaped object from the branch actually stored on the ticket, so
+// the rest of the views (which all read t.student.branch_id) don't need to change.
 function hydrate(tickets) {
   return tickets.map(t => ({
     ...t,
-    student: { name: t.student_name || "", branch_id: t.target_branch_id },
+    student: { branch_id: t.target_branch_id },
   }));
 }
 
@@ -54,6 +58,9 @@ function hydrate(tickets) {
 async function refreshData() {
   state.dataLoading = true; render();        // top bar appears
   BRANCHES = await loadBranches();           // populate global branch list
+  const customCats = await loadCategories();
+  CATEGORIES = { ...BUILTIN_CATEGORIES };    // built-ins always present, admin-added ones on top
+  for (const c of customCats) CATEGORIES[c.key] = { label: c.label, desc: c.desc, dept: c.dept, role: c.role, color: c.color, icon: c.icon };
   state.students = await loadStudents();
   state.users = await loadProfiles();
   const raw = await loadTickets();
@@ -91,7 +98,6 @@ async function parseTicketWithAI(text) {
 
   state.qc.aiParsing = false;
   if (data.category && CATEGORIES[data.category]) state.qc.cat = data.category;
-  if (data.studentName) state.qc.studentName = data.studentName;
   if (data.branchId && BRANCHES.some(b => b.id === data.branchId)) state.qc.branch = data.branchId;
   if (data.fields && typeof data.fields === "object") state.qc.fields = { ...state.qc.fields, ...data.fields };
 
@@ -99,12 +105,12 @@ async function parseTicketWithAI(text) {
 }
 
 /* ---- TICKET WRITES (write via the backend) ---- */
-async function createTicket(cat, studentName, branchId, details) {
+async function createTicket(cat, branchId, details) {
   state.submittingTicket = true; render();
 
   let result;
   try {
-    result = await apiPost("/tickets", { category: cat, studentName, branchId, details });
+    result = await apiPost("/tickets", { category: cat, branchId, details });
   } catch (e) {
     state.submittingTicket = false; render();
     showToast("Create failed: " + e.message, "error");
@@ -150,12 +156,12 @@ async function approveFocTicket(id) {
 // coach-side edit: requires status "New" (their own restriction, backed by RLS).
 // admin-side edit: allowed for anything not yet closed (Completed/Rejected) —
 // admin has broader authority, but editing a closed record would rewrite history.
-async function updateTicketFull(id, cat, studentName, branchId, details, opts = {}) {
+async function updateTicketFull(id, cat, branchId, details, opts = {}) {
   state.submittingTicket = true; render();
 
   let result;
   try {
-    result = await apiPut(`/tickets/${id}`, { category: cat, studentName, branchId, details, requireNew: !!opts.requireNew });
+    result = await apiPut(`/tickets/${id}`, { category: cat, branchId, details, requireNew: !!opts.requireNew });
   } catch (e) {
     state.submittingTicket = false; render();
     const msg = e.status === 409 ? e.message : "Update failed: " + e.message;
@@ -342,4 +348,26 @@ async function deleteBranch(id) {
   }
   await refreshData();
   showToast("Branch deleted", "success");
+}
+
+/* ---- TICKET CATEGORY MANAGEMENT (admin) ---- */
+async function createCategory(key, fields) {
+  try {
+    await apiPost("/categories", { key, ...fields });
+    return true;
+  } catch (e) {
+    state.newCategory.msg = "Error: " + e.message; render();
+    return false;
+  }
+}
+
+async function deleteCategory(key) {
+  try {
+    await apiDelete(`/categories/${key}`);
+  } catch (e) {
+    showToast(e.status === 409 ? e.message : "Delete failed: " + e.message, "error");
+    return;
+  }
+  await refreshData();
+  showToast("Category deleted", "success");
 }

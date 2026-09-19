@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { routeTicket, CATEGORIES } = require("../routing");
+const { routeTicket, loadCategories } = require("../routing");
 
 function genTicketCode() {
   const t = Date.now().toString(36).toUpperCase();
@@ -21,18 +21,22 @@ router.get("/", async (req, res) => {
   res.json(data);
 });
 
-// POST /api/tickets  { category, studentName, branchId, details }
+// POST /api/tickets  { category, branchId, details }
 router.post("/", async (req, res) => {
-  const { category, studentName, branchId, details } = req.body || {};
-  let branches;
-  try { branches = await getBranches(req.sb); } catch (e) { return res.status(400).json({ error: e.message }); }
-  const r = routeTicket(category, branchId, details, branches);
+  const { category, branchId, details } = req.body || {};
+  let branches, categories;
+  try {
+    branches = await getBranches(req.sb);
+    categories = await loadCategories(req.sb);
+  } catch (e) { return res.status(400).json({ error: e.message }); }
+  if (!categories[category]) return res.status(400).json({ error: `Unknown category "${category}"` });
+  const r = routeTicket(category, branchId, details, branches, categories);
 
   let error, data;
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = genTicketCode();
     ({ data, error } = await req.sb.from("tickets").insert({
-      ticket_code: code, category, student_name: studentName,
+      ticket_code: code, category,
       target_branch_id: r.target_branch_id, assigned_department: r.assigned_department,
       assigned_role: r.assigned_role, routed_to: r.routed_to,
       status: "New", priority: category === "SpecialCare" ? "High" : "Normal",
@@ -52,15 +56,19 @@ router.patch("/:id/status", async (req, res) => {
   res.json({ ok: true });
 });
 
-// PUT /api/tickets/:id  { category, studentName, branchId, details, requireNew }
+// PUT /api/tickets/:id  { category, branchId, details, requireNew }
 router.put("/:id", async (req, res) => {
-  const { category, studentName, branchId, details, requireNew } = req.body || {};
-  let branches;
-  try { branches = await getBranches(req.sb); } catch (e) { return res.status(400).json({ error: e.message }); }
-  const r = routeTicket(category, branchId, details, branches);
+  const { category, branchId, details, requireNew } = req.body || {};
+  let branches, categories;
+  try {
+    branches = await getBranches(req.sb);
+    categories = await loadCategories(req.sb);
+  } catch (e) { return res.status(400).json({ error: e.message }); }
+  if (!categories[category]) return res.status(400).json({ error: `Unknown category "${category}"` });
+  const r = routeTicket(category, branchId, details, branches, categories);
 
   let q = req.sb.from("tickets").update({
-    category, student_name: studentName,
+    category,
     target_branch_id: r.target_branch_id, assigned_department: r.assigned_department,
     assigned_role: r.assigned_role, routed_to: r.routed_to,
     priority: category === "SpecialCare" ? "High" : "Normal",
@@ -87,10 +95,13 @@ router.post("/:id/approve-foc", async (req, res) => {
     .select("category, target_branch_id").eq("id", req.params.id).single();
   if (gErr) return res.status(400).json({ error: gErr.message });
 
-  let branches;
-  try { branches = await getBranches(req.sb); } catch (e) { return res.status(400).json({ error: e.message }); }
+  let branches, categories;
+  try {
+    branches = await getBranches(req.sb);
+    categories = await loadCategories(req.sb);
+  } catch (e) { return res.status(400).json({ error: e.message }); }
   const branchName = (id) => branches.find((b) => b.id === id)?.name ?? "—";
-  const rule = CATEGORIES[existing.category];
+  const rule = categories[existing.category];
 
   const patch = { assigned_role: rule.role, routed_to: `Front Desk — ${branchName(existing.target_branch_id)}` };
   const { error } = await req.sb.from("tickets").update(patch).eq("id", req.params.id);
