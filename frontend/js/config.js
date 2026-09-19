@@ -12,8 +12,11 @@ const SUPABASE_ANON_KEY = "sb_publishable_6dNw4OkobcRyxE8TMmX8AQ_cmC3C-v9";
 // both are safe to talk to directly with the anon key, same as before.
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// the Express backend (see ../../backend). Change for prod deployment.
-const API_BASE_URL = "http://localhost:3001/api";
+// the Express backend (see ../../backend). Local dev uses localhost:3001;
+// anywhere else (e.g. the deployed Render static site) uses the deployed backend.
+const API_BASE_URL = ["localhost", "127.0.0.1"].includes(location.hostname)
+  ? "http://localhost:3001/api"
+  : "https://shuttledesk-fullstack.onrender.com/api";
 
 /* ---- Branches ----
    Loaded from the backend (branches table) at startup.
