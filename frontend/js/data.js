@@ -130,6 +130,23 @@ async function advanceTicket(id, next) {
   showToast(next === "New" ? "Ticket reopened" : `Marked ${next.replace("_"," ")}`, "success");
 }
 
+// senior admin: sign off a FOC equipment request — the backend resets
+// assigned_role/routed_to so it falls out of the SeniorAdmin-only visibility
+// filter and any admin can pick it up.
+async function approveFocTicket(id) {
+  state.busyTicket = id; render();
+  try {
+    await apiPost(`/tickets/${id}/approve-foc`, {});
+  } catch (e) {
+    state.busyTicket = null; render();
+    showToast("Approve failed: " + e.message, "error");
+    return;
+  }
+  state.busyTicket = null;
+  await refreshData();
+  showToast("FOC approved — now visible to Front Desk admin", "success");
+}
+
 // coach-side edit: requires status "New" (their own restriction, backed by RLS).
 // admin-side edit: allowed for anything not yet closed (Completed/Rejected) —
 // admin has broader authority, but editing a closed record would rewrite history.

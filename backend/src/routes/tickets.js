@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { routeTicket } = require("../routing");
+const { routeTicket, CATEGORIES } = require("../routing");
 
 function genTicketCode() {
   const t = Date.now().toString(36).toUpperCase();
@@ -74,6 +74,28 @@ router.put("/:id", async (req, res) => {
     return res.status(409).json({ error: "Edit blocked — it may have already been closed, or you lack permission" });
   }
   res.json({ routed_to: r.routed_to });
+});
+
+// POST /api/tickets/:id/approve-foc — senior admin signs off a FOC equipment
+// request. Resets assigned_role/routed_to to what a normal (non-FOC) ticket
+// of this category would have gotten, so it falls out of the SeniorAdmin-only
+// visibility filter and any admin can pick it up. Same permission model as
+// every other route here: RLS decides whether this admin may update the row
+// at all — "senior admin" is a frontend-only concept, so it's not re-checked here.
+router.post("/:id/approve-foc", async (req, res) => {
+  const { data: existing, error: gErr } = await req.sb.from("tickets")
+    .select("category, target_branch_id").eq("id", req.params.id).single();
+  if (gErr) return res.status(400).json({ error: gErr.message });
+
+  let branches;
+  try { branches = await getBranches(req.sb); } catch (e) { return res.status(400).json({ error: e.message }); }
+  const branchName = (id) => branches.find((b) => b.id === id)?.name ?? "—";
+  const rule = CATEGORIES[existing.category];
+
+  const patch = { assigned_role: rule.role, routed_to: `Front Desk — ${branchName(existing.target_branch_id)}` };
+  const { error } = await req.sb.from("tickets").update(patch).eq("id", req.params.id);
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ ok: true });
 });
 
 // POST /api/tickets/:id/reject  { reason }

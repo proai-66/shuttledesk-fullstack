@@ -246,6 +246,14 @@ function editBtn(id){
     class="text-xs font-medium px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200">
     ${icon("edit","w-3.5 h-3.5")}${tr("btn_edit")}</button>`;
 }
+// senior admin: sign off a FOC equipment request — once approved, it drops
+// the "SeniorAdmin" gate and becomes visible/actionable to any admin
+function approveFocBtn(id){
+  const busy = state.busyTicket === id;
+  return `<button data-action="approve-foc" data-id="${id}" ${busy?"disabled":""}
+    class="text-xs font-medium px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60">
+    ${busy ? `${icon("spinner","w-3.5 h-3.5 animate-spin")}Working…` : `${icon("check","w-3.5 h-3.5")}Approve FOC`}</button>`;
+}
 // admin: opens the reject-reason modal
 function rejectBtn(id){
   return `<button data-action="open-reject" data-id="${id}"
@@ -322,7 +330,7 @@ function TicketDetailModal(){
   if (!t) return "";
   const c = CATEGORIES[t.category];
   const when = t.created_at ? new Date(t.created_at).toLocaleString() : "—";
-  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-ticket-detail">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg mt-0 sm:mt-10 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon(c.icon,"w-5 h-5")}${tr("detail_title")}</h2>
@@ -358,7 +366,7 @@ function RejectModal(){
   const t = state.tickets.find(x => x.id === state.rejectingId);
   if (!t) return "";
   const reason = state.rejectReason || "";
-  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-reject">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md mt-0 sm:mt-16 shadow-xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon("x","w-5 h-5 text-red-600")}Reject ticket</h2>
@@ -384,7 +392,7 @@ function NoteModal(){
   const t = state.tickets.find(x => x.id === state.noteEditId);
   if (!t) return "";
   const note = state.noteDraft || "";
-  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-note">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md mt-0 sm:mt-16 shadow-xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon("note","w-5 h-5")}Note</h2>
@@ -463,6 +471,19 @@ function CoachView() {
 // which action buttons an open ticket gets depends on its category — Reject
 // is offered for every category, not per-category, so it lives outside the switch
 function adminActionsFor(t){
+  // A senior admin's job here is sign-off only: while a FOC ticket is still
+  // pending their decision, Approve or Reject it — nothing else, and NEVER
+  // the day-to-day processing buttons (Mark ready / Mark collected / Edit).
+  // Once decided (approved → assigned_role moves off "SeniorAdmin", or
+  // rejected → status "Rejected"), that decision is final — no more Approve
+  // or Reject from the senior admin, just Note left available for both.
+  if (isSeniorAdmin()) {
+    const pending = t.assigned_role === "SeniorAdmin";
+    return `<div class="flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex items-center gap-2 flex-wrap">${pending ? `${approveFocBtn(t.id)}${rejectBtn(t.id)}` : ""}${noteBtn(t)}</div>
+    </div>`;
+  }
+
   let primary;
   if (t.category === "Equipment")
     primary = t.status !== "Ready" ? actionBtn(t.id,"Ready","Mark ready","package","amber") : actionBtn(t.id,"Completed","Mark collected","check","green");
@@ -617,7 +638,7 @@ function AdminUserPanel() {
     const isNew = nu.editing === "new";
     const isSelf = !isNew && nu.editing === state.profile.id;
     return `
-    <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+    <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="user-cancel-edit">
       <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md mt-0 sm:mt-16 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto">
         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon(isNew?"plus":"edit","w-5 h-5")}${isNew?"Create account":"Edit account"}</h2>
@@ -661,7 +682,7 @@ function AdminUserPanel() {
       </div>`).join("");
 
   return `
-  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-users">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md mt-0 sm:mt-16 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto flex flex-col">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon("users","w-5 h-5")}Accounts <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${state.users.length}</span></h2>
@@ -688,7 +709,7 @@ function AdminBranchPanel() {
       </div>`).join("");
 
   return `
-  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-branches">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md mt-0 sm:mt-16 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon("building","w-5 h-5")}Manage branches</h2>
@@ -737,7 +758,7 @@ function AdminImportPanel() {
   const canImport = im.rows.length > 0 && im.branch && !im.importing;
 
   return `
-  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-import">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg mt-0 sm:mt-16 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon("upload","w-5 h-5")}Import students</h2>
@@ -787,7 +808,7 @@ function AdminStudentPanel() {
       BRANCHES.map(b => `<option value="${b.id}" ${f.branch_id===b.id?"selected":""}>${b.name}</option>`).join("");
 
     return `
-    <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+    <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="stu-cancel-edit">
       <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md mt-0 sm:mt-16 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto">
         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon(isNew?"plus":"edit","w-5 h-5")}${isNew?"Add student":"Edit student"}</h2>
@@ -832,7 +853,7 @@ function AdminStudentPanel() {
       </div>`).join("");
 
   return `
-  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  <div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-students">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg mt-0 sm:mt-16 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto flex flex-col">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon("cap","w-5 h-5")}Students <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${state.students.length}</span></h2>
@@ -859,7 +880,7 @@ function AdminStudentPanel() {
    so the page never fully repaints — no flash. ===== */
 function QuickCreateView() {
   const editing = !!state.qc.editingId;
-  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto">
+  return `<div class="modal-backdrop fixed inset-0 bg-black/40 flex items-end sm:items-start justify-center p-0 sm:p-4 z-50 overflow-y-auto" data-close="close-modal">
     <div class="modal-card bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg mt-0 sm:mt-10 shadow-xl max-h-[92vh] sm:max-h-none overflow-y-auto">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <h2 class="font-semibold text-slate-900 flex items-center gap-2">${icon(editing?"edit":"plus","w-5 h-5")}${editing?tr("qc_title_edit"):tr("qc_title_new")}</h2>
@@ -888,8 +909,14 @@ function quickCreateBody() {
     ${aiError?`<div class="text-xs text-red-600">${aiError}</div>`:""}
   </div>`;
 
+  // only admins can pick a category other than Equipment — coaches only
+  // ever raise Equipment tickets, so their picker is narrowed to just that
+  // (an OLD non-Equipment ticket being edited still shows its own category
+  // too, so the picker doesn't just look broken for it).
+  const isAdmin = state.profile.role === "admin";
+  const catOptions = isAdmin ? Object.entries(CATEGORIES) : Object.entries(CATEGORIES).filter(([key])=>key==="Equipment"||key===cat);
   const catBlock = `<div><label class="text-xs font-medium text-slate-500 mb-1 block">${tr("qc_category")}</label>
-    <div class="grid grid-cols-2 gap-2">${Object.entries(CATEGORIES).map(([key,c])=>`<button data-action="qc-pick-cat" data-cat="${key}" class="flex items-start gap-2 px-3 py-2 rounded-lg border text-left transition ${cat===key?"border-slate-900 bg-slate-900 text-white":"border-slate-200 hover:border-slate-400"}">${icon(c.icon,"w-4 h-4 mt-0.5 shrink-0")}<span><span class="text-sm font-medium block">${tr("cat_"+key+"_label")}</span><span class="text-xs ${cat===key?"text-slate-300":"text-slate-400"}">${tr("cat_"+key+"_desc")}</span></span></button>`).join("")}</div></div>`;
+    <div class="grid grid-cols-2 gap-2">${catOptions.map(([key,c])=>`<button data-action="qc-pick-cat" data-cat="${key}" class="flex items-start gap-2 px-3 py-2 rounded-lg border text-left transition ${cat===key?"border-slate-900 bg-slate-900 text-white":"border-slate-200 hover:border-slate-400"}">${icon(c.icon,"w-4 h-4 mt-0.5 shrink-0")}<span><span class="text-sm font-medium block">${tr("cat_"+key+"_label")}</span><span class="text-xs ${cat===key?"text-slate-300":"text-slate-400"}">${tr("cat_"+key+"_desc")}</span></span></button>`).join("")}</div></div>`;
 
   const fieldsBlock = cat ? dynamicFields(cat, fields) : "";
 

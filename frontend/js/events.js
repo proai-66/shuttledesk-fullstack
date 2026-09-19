@@ -7,9 +7,15 @@
 
 /* ---- CLICKS ---- */
 document.addEventListener("click", async (e) => {
-  const el = e.target.closest("[data-action]");
+  // clicking the dimmed area behind a modal (not the card itself) closes it,
+  // same effect as its own "X"/Cancel button — every modal-backdrop div
+  // carries a data-close naming that action. e.target must BE the backdrop
+  // (not just inside it), so clicks anywhere on the card don't bubble into this.
+  const backdrop = e.target.matches(".modal-backdrop") ? e.target : null;
+  const el = backdrop || e.target.closest("[data-action]");
   if (!el) return;
-  const a = el.dataset.action;
+  const a = backdrop ? backdrop.dataset.close : el.dataset.action;
+  if (!a) return;
 
   switch (a) {
     /* login screen */
@@ -162,6 +168,9 @@ document.addEventListener("click", async (e) => {
 
     /* ticket status actions (admin) */
     case "advance":       await advanceTicket(el.dataset.id, el.dataset.next); break;
+
+    /* senior admin: sign off a FOC equipment request — hands it to any admin */
+    case "approve-foc": await approveFocTicket(el.dataset.id); break;
 
     /* anyone: read-only detail popup — open or completed, doesn't matter */
     case "view-ticket":        state.ticketDetail = el.dataset.id; render(); break;
